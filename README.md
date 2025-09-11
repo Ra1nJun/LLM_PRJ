@@ -1,6 +1,15 @@
 # LLM_PRJ
 Pet Disease Prediction Chatbot
 
+# Git Branch 전략
+|브랜치명|설명|
+|:---:|:---|
+|main|안정적인 버전|
+|dev|다음 버전을 위한 준비|
+|feat|새로운 기능|
+|hotfix|긴급 버그 수정|
+> 예시: feat/[폴더명]/[파일명]
+
 # 데이터 출처
  - Pet Health Symptoms Dataset : https://www.kaggle.com/datasets/yyzz1010/pet-health-symptoms-dataset?utm_source=chatgpt.com
  - animal disease prediction : https://www.kaggle.com/datasets/shijo96john/animal-disease-prediction?utm_source=chatgpt.com
