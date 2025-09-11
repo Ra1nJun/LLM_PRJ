@@ -8,7 +8,8 @@ Pet Disease Prediction Chatbot
 |dev|다음 버전을 위한 준비|
 |feat|새로운 기능|
 |hotfix|긴급 버그 수정|
-> 예시: feat/[폴더명]/[파일명]
+|refactoring|구조 단순화 및 수정|
+> 예시: feat/LLM/simple_llm
 
 # 데이터 출처
  - Pet Health Symptoms Dataset : https://www.kaggle.com/datasets/yyzz1010/pet-health-symptoms-dataset?utm_source=chatgpt.com
