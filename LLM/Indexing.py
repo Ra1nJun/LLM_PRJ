@@ -1,4 +1,4 @@
-from pymilvus import MilvusClient, DataType
+from pymilvus import MilvusClient, DataType, CollectionSchema, FieldSchema
 from FlagEmbedding import BGEM3FlagModel
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import fitz
@@ -16,15 +16,15 @@ def check_milvus_and_create():
   if VectorDB.has_collection('my_collection'):
     VectorDB.drop_collection('my_collection')
 
-  schema=MilvusClient.create_schema(auto_id=True, enable_dynamic_field=False,
+  custom_schema = CollectionSchema(auto_id=True, enable_dynamic_field=False,
                                     fields=[
-                                      {'name': 'id', 'type': DataType.INT64, 'is_primary': True, 'auto_id': True},
-                                      {'name': 'embedding', 'type': DataType.FLOAT_VECTOR, 'params': {'dim': 1024}},
-                                      {'name': 'text', 'type': DataType.VARCHAR, 'params': {'max_length': 3000}},
-                                      {'name': 'source', 'type': DataType.VARCHAR, 'params': {'max_length': 100}}
+                                      FieldSchema(name='id', dtype=DataType.INT64, is_primary=True, auto_id=True),
+                                      FieldSchema(name='embedding', dtype=DataType.FLOAT_VECTOR, dim=1024),
+                                      FieldSchema(name='text', dtype=DataType.VARCHAR, max_length=1024),
+                                      FieldSchema(name='source', dtype=DataType.VARCHAR, max_length=128)
                                     ]
   )
-  VectorDB.create_collection('my_collection', schema)
+  VectorDB.create_collection(collection_name='my_collection', schema=custom_schema)
   return VectorDB
 
 # PDF에서 텍스트 추출
@@ -86,6 +86,8 @@ def get_pdf_files(directory):
     return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.pdf')]
 
 def main():
+  global pdf_path, embedding_model_name
+
   print("MilvusDB 연결 확인 및 컬렉션 생성 중...")
   VectorDB = check_milvus_and_create()
 
