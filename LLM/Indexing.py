@@ -22,7 +22,7 @@ def check_milvus_and_create():
                                     fields=[
                                       FieldSchema(name='id', dtype=DataType.INT64, is_primary=True, auto_id=True),
                                       FieldSchema(name='embedding', dtype=DataType.FLOAT_VECTOR, dim=1024),
-                                      FieldSchema(name='text', dtype=DataType.VARCHAR, max_length=1024),
+                                      FieldSchema(name='text', dtype=DataType.VARCHAR, max_length=2048),
                                       FieldSchema(name='source', dtype=DataType.VARCHAR, max_length=128)
                                     ]
   )
@@ -66,11 +66,8 @@ def batch_translate(chunks, batch_size=16, model_name=translate_model_name):
   for i in range(0, len(chunks), batch_size):
     batch = chunks[i:i + batch_size]
 
-    # 번역을 위한 접두사 추가
-    prefixed_batch = [f"translate English to Korean: {text}" for text in batch]
-
     # 모델 입력 형태로 변환 및 번역
-    tokenized_batch = tokenizer(prefixed_batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
+    tokenized_batch = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
     with torch.no_grad():
       translated = model.generate(**tokenized_batch)
 
@@ -110,7 +107,10 @@ def main():
   global pdf_path, embedding_model_name, translate_model_name
 
   print("MilvusDB 연결 확인 및 컬렉션 생성 중...")
-  VectorDB = check_milvus_and_create()
+  try:
+    VectorDB = check_milvus_and_create()
+  except:
+    print("MilvusDB 연결 실패. MilvusDB가 실행 중인지 확인하세요.")
 
   print("임베딩 모델 로드 중...")
   embedding_model = BGEM3FlagModel(embedding_model_name, use_fp16=True)
