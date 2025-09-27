@@ -1,17 +1,20 @@
 from pymilvus import MilvusClient, DataType, CollectionSchema, FieldSchema
-from pymilvus.client.types import IndexType, MetricType
 from FlagEmbedding import BGEM3FlagModel
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import fitz
+from docling.chunking import HybridChunker
+from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
+from transformers import AutoTokenizer
 import torch
 from langdetect import detect
 import os
+import pdfplumber
+from docling_core.types.doc.document import DoclingDocument
 
 pdf_path = "./DATA"
 embedding_model_name = "BAAI/bge-m3"
 translate_model_name = "seongs/ke-t5-base-aihub-koen-translation-integrated-10m-en-to-ko"
 
-# MilvusDB 연결 확인 및 컬렉션 생성
+# ================== MilvusDB 연결 확인 및 컬렉션 생성 ==================
 def check_milvus_and_create():
   VectorDB = MilvusClient(host='localhost', port='19530')
 
@@ -46,18 +49,43 @@ def check_milvus_and_create():
   
   return VectorDB
 
-# PDF에서 텍스트 추출
-def extract_text_from_pdf(pdf_path):
-  doc = fitz.open(pdf_path)
-  text_chunk = []
-  for page in doc:
-    texts = page.get_text('blocks') # blocks는 문단 단위로 텍스트를 추출
-    for block in texts:
-      text_chunk.append(block[4].strip())
-  doc.close()
+# ================== PDF에서  추출 ==================
+def extract_chunks_with_docling_semantic(pdf_path, embed_model_name):
+    # 1) PDF → 텍스트 (간단 추출)
+    text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+      for page in pdf.pages:
+        text += page.extract_text() or ""
 
-  return [chunk for chunk in text_chunk if chunk]
+    if not text.strip():
+      return []
 
+    # 2) HuggingFace tokenizer
+    hf_tokenizer = AutoTokenizer.from_pretrained(embed_model_name)
+    tokenizer = HuggingFaceTokenizer(tokenizer=hf_tokenizer)
+
+    # 3) DoclingDocument 생성
+    dl_doc = DoclingDocument(
+      metadata={"source": pdf_path},
+      pages=[{"text": text}]
+    )
+
+    # 4) 의미적 청크 분할
+    chunker = HybridChunker(
+      tokenizer=tokenizer,
+      max_characters=800,
+      max_tokens=1024,
+      split_sentences=True,
+      overlap=50,
+    )
+
+    chunks = []
+    for chunk in chunker.chunk(dl_doc):  # ⚡ str이 아닌 DoclingDocument 전달
+      if chunk.text.strip():
+        chunks.append(chunk.text.strip())
+
+    return chunks
+# ================== 배치 번역 및 임베딩 ==================
 def batch_translate(chunks, batch_size=16, model_name=translate_model_name):
   tokenizer = AutoTokenizer.from_pretrained(model_name)
   model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
@@ -77,7 +105,7 @@ def batch_translate(chunks, batch_size=16, model_name=translate_model_name):
 
   return translated_chunks
 
-# batch 임베딩
+# ================== batch 임베딩 ==================
 def batch_embedding(chunks, embedding_model, batch_size=16):
   embeddings = []
 
@@ -87,6 +115,7 @@ def batch_embedding(chunks, embedding_model, batch_size=16):
     embeddings.extend(batch_embeddings['dense_vecs'])
   return embeddings
 
+# ================== MilvusDB에 삽입 ==================
 def insert_to_milvus(embeddings, chunks, source, VectorDB):
   entities = []
 
@@ -100,6 +129,7 @@ def insert_to_milvus(embeddings, chunks, source, VectorDB):
   
   VectorDB.insert('my_collection', entities)
 
+# ================== 메인 함수 ==================
 def get_pdf_files(directory):
     return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.pdf')]
 
@@ -125,8 +155,9 @@ def main():
     source_name = os.path.basename(pdf_path)
     print(f"\n처리하고 있는 파일: {source_name}")
 
-    text_chunks = extract_text_from_pdf(pdf_path)
-    print(f"추출된 텍스트 청크 수: {len(text_chunks)}")
+    # 의미적 청크 분할
+    text_chunks = extract_chunks_with_docling_semantic(pdf_path, embedding_model_name)
+    print("청크 수:", len(text_chunks))
 
     if not text_chunks:
       print(f"'{source_name}' 파일에서 텍스트 감지 실패")
@@ -152,9 +183,6 @@ def main():
     insert_to_milvus(embeddings, processed_chunks, source_name, VectorDB)
   
   VectorDB.load_collection(collection_name='my_collection')
-
-  # print("삽입된 데이터를 Milvus에 플러시 중...")
-  # VectorDB.flush(collection_name=['my_collection'])
 
   print("\n인덱싱 작업 완료")
 
