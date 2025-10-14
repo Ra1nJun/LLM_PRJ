@@ -8,7 +8,7 @@ import torch
 from langdetect import detect
 import os
 import pdfplumber
-from docling_core.types.doc.document import DoclingDocument
+from docling.document_converter import DocumentConverter
 
 pdf_path = "./DATA"
 embedding_model_name = "BAAI/bge-m3"
@@ -49,42 +49,87 @@ def check_milvus_and_create():
   
   return VectorDB
 
-# ================== PDF에서  추출 ==================
-def extract_chunks_with_docling_semantic(pdf_path, embed_model_name):
-    # 1) PDF → 텍스트 (간단 추출)
-    text = ""
-    with pdfplumber.open(pdf_path) as pdf:
-      for page in pdf.pages:
-        text += page.extract_text() or ""
+# ================== PDF 인코딩 문제 해결 ==================
+def fix_pdf_encoding(pdf_path):
+    """손상된 PDF의 인코딩 문제 수정"""
+    try:
+        import fitz
+        
+        # pymupdf를 사용해서 PDF 다시 저장
+        doc = fitz.open(pdf_path)
+        temp_pdf = pdf_path.replace('.pdf', '_fixed.pdf')
+        doc.save(temp_pdf)
+        doc.close()
+        
+        return temp_pdf
+    except Exception as e:
+        print(f"PDF 수정 실패: {e}")
+        return None
 
-    if not text.strip():
-      return []
+# ================== PDF에서 청크 추출 ==================
+def extract_chunks_with_docling_semantic(pdf_path, embed_model_name, embedding_model):
+    try:
+        # 1) DocumentConverter를 사용해 PDF 처리
+        converter = DocumentConverter()
+        doc = converter.convert(pdf_path).document
 
-    # 2) HuggingFace tokenizer
-    hf_tokenizer = AutoTokenizer.from_pretrained(embed_model_name)
-    tokenizer = HuggingFaceTokenizer(tokenizer=hf_tokenizer)
+        # 2) HuggingFace tokenizer
+        hf_tokenizer = AutoTokenizer.from_pretrained(embed_model_name)
+        tokenizer = HuggingFaceTokenizer(tokenizer=hf_tokenizer)
 
-    # 3) DoclingDocument 생성
-    dl_doc = DoclingDocument(
-      metadata={"source": pdf_path},
-      pages=[{"text": text}]
-    )
+        # 3) 의미적 청크 분할
+        chunker = HybridChunker(
+          tokenizer=tokenizer,
+          max_characters=800,
+          max_tokens=1024,
+          split_sentences=True,
+          overlap=50,
+        )
 
-    # 4) 의미적 청크 분할
-    chunker = HybridChunker(
-      tokenizer=tokenizer,
-      max_characters=800,
-      max_tokens=1024,
-      split_sentences=True,
-      overlap=50,
-    )
+        chunks = []
+        for chunk in chunker.chunk(doc):
+          if chunk.text.strip():
+            chunks.append(chunk.text.strip())
 
-    chunks = []
-    for chunk in chunker.chunk(dl_doc):  # ⚡ str이 아닌 DoclingDocument 전달
-      if chunk.text.strip():
-        chunks.append(chunk.text.strip())
+        return chunks
+    
+    except RuntimeError as e:
+        if "Invalid code point" in str(e):
+            print(f"인코딩 문제 감지. PDF 파일 복구 시도 중...")
+            fixed_pdf = fix_pdf_encoding(pdf_path)
+            if fixed_pdf:
+                try:
+                    converter = DocumentConverter()
+                    doc = converter.convert(fixed_pdf).document
+                    
+                    hf_tokenizer = AutoTokenizer.from_pretrained(embed_model_name)
+                    tokenizer = HuggingFaceTokenizer(tokenizer=hf_tokenizer)
+                    
+                    chunker = HybridChunker(
+                      tokenizer=tokenizer,
+                      max_characters=800,
+                      max_tokens=1024,
+                      split_sentences=True,
+                      overlap=50,
+                    )
+                    
+                    chunks = []
+                    for chunk in chunker.chunk(doc):
+                      if chunk.text.strip():
+                        chunks.append(chunk.text.strip())
+                    
+                    # 임시 파일 삭제
+                    if os.path.exists(fixed_pdf):
+                        os.remove(fixed_pdf)
+                    
+                    return chunks
+                except Exception as e2:
+                    print(f"복구된 PDF 처리도 실패: {e2}")
+                    return []
+            return []
+        else:
+            raise e
 
-    return chunks
 # ================== 배치 번역 및 임베딩 ==================
 def batch_translate(chunks, batch_size=16, model_name=translate_model_name):
   tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -139,11 +184,12 @@ def main():
   print("MilvusDB 연결 확인 및 컬렉션 생성 중...")
   try:
     VectorDB = check_milvus_and_create()
-  except:
-    print("MilvusDB 연결 실패. MilvusDB가 실행 중인지 확인하세요.")
+  except Exception as e:
+    print(f"MilvusDB 연결 실패. MilvusDB가 실행 중인지 확인하세요. 오류: {e}")
+    return
 
   print("임베딩 모델 로드 중...")
-  embedding_model = BGEM3FlagModel(embedding_model_name, use_fp16=True)
+  embedding_model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
 
   file_list = get_pdf_files(pdf_path)
   if not file_list:
@@ -151,12 +197,12 @@ def main():
     return
 
   print(f"총 {len(file_list)}개의 PDF 파일 확인")
-  for pdf_path in file_list:
-    source_name = os.path.basename(pdf_path)
+  for pdf_file in file_list:
+    source_name = os.path.basename(pdf_file)
     print(f"\n처리하고 있는 파일: {source_name}")
 
     # 의미적 청크 분할
-    text_chunks = extract_chunks_with_docling_semantic(pdf_path, embedding_model_name)
+    text_chunks = extract_chunks_with_docling_semantic(pdf_file, embedding_model_name, embedding_model)
     print("청크 수:", len(text_chunks))
 
     if not text_chunks:
@@ -166,9 +212,9 @@ def main():
     try:
       lang = detect(text_chunks[0])
       print(f"{lang} 언어 감지")
-    except:
+    except Exception as e:
       lang = 'ko'
-      print(f"'{source_name}' 에서 언어 감지 실패로 기본 언어로 설정(ko)")
+      print(f"'{source_name}' 에서 언어 감지 실패로 기본 언어로 설정(ko). 오류: {e}")
 
     processed_chunks = []
 
