@@ -1,34 +1,80 @@
 from pymilvus import MilvusClient
 from sentence_transformers import SentenceTransformer
-from typing import TypedDict, List
+from typing import TypedDict, List, Optional
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_core.runnables.graph_mermaid import draw_mermaid_png
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
 import os
 from dotenv import load_dotenv
+from FlagEmbedding import BGEM3FlagModel
 
 # 상태 정의
 class Graph_State(TypedDict):
-  questuion: str
+  question: str
   context: List[Document]
   answer: str
+  context_quality: str
+  rewrite_count: int
+  milvus_client: Optional[MilvusClient] 
+  embedding_model: Optional[BGEM3FlagModel]
 
-# 데이터 초기화
-def init(state):
-  pass
+# 실행 준비
+def init_node(state: Graph_State) -> dict:
+  # 데이터 초기화
+  initial_state = {
+        "question": "",
+        "context": [],
+        "answer": "",
+        "context_quality": "",
+        "rewrite_count": 0,
+        "milvus_client": None,
+        "embedding_model": None,
+    }
+
+  # MilvusDB 연결
+  load_dotenv()
+  MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
+  MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+  EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3")
+
+  try:
+    client = MilvusClient(host=MILVUS_HOST, port=MILVUS_PORT)
+    initial_state["milvus_client"] = client
+    print(f"[Init] MilvusClient 연결 성공: {MILVUS_HOST}")
+  except Exception as e:
+    print(f"[Init 오류] MilvusClient 연결 실패: {e}")
+    exit(1)
+
+  # 임베딩 모델 로드
+  try:
+    model = BGEM3FlagModel(EMBEDDING_MODEL_NAME, device='cuda')
+    initial_state["embedding_model"] = model
+    print(f"[Init] BGEM3FlagModel 로드 성공: {EMBEDDING_MODEL_NAME}")
+  except Exception as e:
+    print(f"[Init 오류] BGEM3FlagModel 로드 실패: {e}")
+    exit(1)
+
+  return initial_state
 
 # 사용자에게 질문 받기
-def input(state):
-  pass
+def input_node(state: Graph_State) -> dict:
+  user_input = input("증상을 입력하세요(종료하고 싶다면 quit): ")
+  return {"question": user_input}
 
 # 벡터DB에서 유사도 검색
-def retriever(state):
+def retriever_node(state: Graph_State) -> dict:
+  pass
+
+# context 품질 체크
+def check_context_node(context: List[Document]):
+  pass
+
+def question_rewrite_node(state):
   pass
 
 # context와 question을 가지고 답변 생성
-def generate(state):
+def generate_node(state):
   load_dotenv()
 
   groq_api_key=os.getenv("GROQ_API_KEY")
@@ -54,54 +100,82 @@ def generate(state):
   return answer
 
 # 최종 답변 출력 후 종료 or 재시작
-def output(state):
+def output_node(state):
   pass
 
 # 워크플로우 정의 (MemorySaver 사용하기)
 def workflow():
   graph = StateGraph(Graph_State)
 
-  graph.add_node("init", init)
-  graph.add_node("input", input)
-  graph.add_node("retriever", retriever)
-  graph.add_node("generate", generate)
-  graph.add_node("output", output)
+  graph.add_node("init_node", init_node)
+  graph.add_node("input_node", input_node)
+  graph.add_node("retriever_node", retriever_node)
+  graph.add_node("check_context_node", check_context_node)
+  graph.add_node("question_rewrite_node", question_rewrite_node)
+  graph.add_node("generate_node", generate_node)
+  graph.add_node("output_node", output_node)
 
-  graph.set_entry_point("init")
+  graph.set_entry_point("init_node")
 
-  graph.add_edge("init", "input")
-  graph.add_edge("input", "retriever")
-  graph.add_edge("retriever", "generate")
-  graph.add_edge("generate", "output")
+  graph.add_edge("init_node", "input_node")
 
-  def dedicate_restart(state: Graph_State) -> bool:
-    if state["question"].lower().strip() in ["exit", "quit", "q", "종료", "끝", "그만"]:
+  def dedicate_quit(state: Graph_State) -> bool:
+    if state["question"].lower() == "quit":
+      print("프로그램을 종료합니다.")
       return "end"
     else:
-      return "input" 
+      return "retreiver_node"
 
-  graph.add_conditional_edges("output",
-                              dedicate_restart,
+  graph.add_conditional_edges("input_node",
+                              dedicate_quit,
                                 {
-                                  "input": "input",
+                                  "retriever_node": "retriever_node",
                                   "end" : END
                                 }
                               )
-  
+  graph.add_edge("retriever_node", "check_context_node")
+
+  def dedicate_review(state: Graph_State) -> str:
+    match(state["context_quality"]):
+      case "good":
+        return "generate_node"
+      case "bad":
+        return "question_rewrite_node"
+      case _:
+        return "output_node"
+
+  graph.add_conditional_edges("check_context_node",
+                              dedicate_review,
+                                {
+                                  "generate_node": "generate_node",
+                                  "question_rewrite_node": "question_rewrite_node",
+                                  "output_node": "output_node"
+                                }
+                              )
+  graph.add_edge("question_rewrite_node", "retriever_node")
+  graph.add_edge("generate_node", "output_node")
+  graph.add_edge("output_node", "input_node")
+
   return graph.compile()
 
-def main():
-  app = workflow()
+# PNG 이미지 생성
+def draw_workflow(app):
   try:
-    mermaid_code = app.get_graph().draw_mermaid()   # Mermaid 코드 뽑기
-    png_data = draw_mermaid_png(mermaid_code)       # PNG 이미지 생성
-
+    png_data = app.get_graph().draw_mermaid_png()
     with open("my_rag_workflow.png", "wb") as f:
         f.write(png_data)
 
     print("그래프가 성공적으로 저장되었습니다.")
   except Exception as e:
     print(f"이미지 생성 중 오류가 발생했습니다: {e}")
+
+def main():
+  app = workflow()
+  # draw_workflow(app)
+
+  initial_state = {}
+  app.invoke(initial_state)
+  
 
 if __name__ == "__main__":
   main()
