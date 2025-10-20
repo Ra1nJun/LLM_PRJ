@@ -11,8 +11,8 @@ from FlagEmbedding import BGEM3FlagModel
 CONFIG = {
     "pdf_path": "./DATA",
     "embedding_model_name": "BAAI/bge-m3",
-    "chunk_size": 1200,
-    "chunk_overlap": 200,
+    "chunk_size": 600,
+    "chunk_overlap": 100,
     "milvus_host": "localhost",
     "milvus_port": "19530",
     "collection_name": "my_collection",
