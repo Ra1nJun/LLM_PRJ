@@ -1,13 +1,21 @@
-from pymilvus import MilvusClient
-from sentence_transformers import SentenceTransformer
+from langchain_milvus import Milvus
 from typing import TypedDict, List, Optional
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
+from langchain_core.retrievers import BaseRetriever
 import os
 from dotenv import load_dotenv
-from FlagEmbedding import BGEM3FlagModel
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
+
+
+load_dotenv()
+MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "my_collection")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3")
 
 # 상태 정의
 class Graph_State(TypedDict):
@@ -16,8 +24,8 @@ class Graph_State(TypedDict):
   answer: str
   context_quality: str
   rewrite_count: int
-  milvus_client: Optional[MilvusClient] 
-  embedding_model: Optional[BGEM3FlagModel]
+  milvus: Optional[Milvus]
+  embedding_model: Optional[Embeddings]
 
 # 실행 준비
 def init_node(state: Graph_State) -> dict:
@@ -28,31 +36,40 @@ def init_node(state: Graph_State) -> dict:
         "answer": "",
         "context_quality": "",
         "rewrite_count": 0,
-        "milvus_client": None,
+        "milvus": None,
         "embedding_model": None,
     }
 
-  # MilvusDB 연결
-  load_dotenv()
-  MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
-  MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-  EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3")
-
-  try:
-    client = MilvusClient(host=MILVUS_HOST, port=MILVUS_PORT)
-    initial_state["milvus_client"] = client
-    print(f"[Init] MilvusClient 연결 성공: {MILVUS_HOST}")
-  except Exception as e:
-    print(f"[Init 오류] MilvusClient 연결 실패: {e}")
-    exit(1)
-
   # 임베딩 모델 로드
   try:
-    model = BGEM3FlagModel(EMBEDDING_MODEL_NAME, device='cuda')
-    initial_state["embedding_model"] = model
-    print(f"[Init] BGEM3FlagModel 로드 성공: {EMBEDDING_MODEL_NAME}")
+    embedding_model = HuggingFaceEmbeddings(
+      model_name=EMBEDDING_MODEL_NAME,
+      model_kwargs={
+          'device': 'cpu' 
+      },
+      encode_kwargs={
+          'normalize_embeddings': True,    # 벡터 정규화
+      }
+    )
+    
+    initial_state["embedding_model"] = embedding_model
+    print(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 성공")
   except Exception as e:
-    print(f"[Init 오류] BGEM3FlagModel 로드 실패: {e}")
+      print(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 실패: {e}")
+      exit(1)
+
+  # MilvusDB 연결
+  try:
+    milvus = Milvus(
+      embedding_function=embedding_model,
+      collection_name=MILVUS_COLLECTION_NAME,
+      connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+      vector_field="embedding" # 벡터 필드 이름
+    )
+    initial_state["milvus"] = milvus
+    print(f"Milvus 연결 성공: {MILVUS_HOST}")
+  except Exception as e:
+    print(f"Milvus 연결 실패: {e}")
     exit(1)
 
   return initial_state
@@ -64,7 +81,19 @@ def input_node(state: Graph_State) -> dict:
 
 # 벡터DB에서 유사도 검색
 def retriever_node(state: Graph_State) -> dict:
-  pass
+  milvus_vectorstore = state["milvus"]
+
+  retriever = milvus_vectorstore.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 5}
+  )
+  retrieved_docs = retriever.invoke(state["question"])
+
+  for i, doc in enumerate(retrieved_docs):
+      print(f"\n- 문서 {i+1} -")
+      print(f"내용(일부): {doc.page_content[:150]}...")
+
+  return {"context": retrieved_docs}
 
 # context 품질 체크
 def check_context_node(context: List[Document]):
@@ -122,15 +151,15 @@ def workflow():
   def dedicate_quit(state: Graph_State) -> bool:
     if state["question"].lower() == "quit":
       print("프로그램을 종료합니다.")
-      return "end"
+      return True
     else:
-      return "retreiver_node"
+      return False
 
   graph.add_conditional_edges("input_node",
                               dedicate_quit,
                                 {
-                                  "retriever_node": "retriever_node",
-                                  "end" : END
+                                  False: "retriever_node",
+                                  True : END
                                 }
                               )
   graph.add_edge("retriever_node", "check_context_node")
