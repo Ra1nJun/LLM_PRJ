@@ -64,7 +64,7 @@ def init_node(state: Graph_State) -> dict:
       embedding_function=embedding_model,
       collection_name=MILVUS_COLLECTION_NAME,
       connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
-      vector_field="embedding" # 벡터 필드 이름
+      vector_field="vector" # 벡터 필드 이름
     )
     initial_state["milvus"] = milvus
     print(f"Milvus 연결 성공: {MILVUS_HOST}")
