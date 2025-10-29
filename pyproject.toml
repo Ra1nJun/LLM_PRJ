@@ -18,4 +18,5 @@ dependencies = [
     "transformers>=4.40.2",
     "torch>=2.9.0", # GPU 버전 사용으로 설치를 따로 해야함 -> [uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126]
     "torchvision>=0.24.0", # 위와 같이 설치됨
+    "elasticsearch>=9.1.1",
 ]
