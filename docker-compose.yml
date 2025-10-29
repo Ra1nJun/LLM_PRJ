@@ -61,6 +61,29 @@ services:
       - "etcd"
       - "minio"
 
+  elasticsearch:
+    container_name: elasticsearch
+    image: elasticsearch:9.2.0
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    command:
+      - sh
+      - -c
+      - |
+        elasticsearch-plugin install analysis-nori
+        /usr/local/bin/docker-entrypoint.sh elasticsearch
+    ports:
+      - "9200:9200"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cat/health?h=status"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
 networks:
   default:
     name: milvus
