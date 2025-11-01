@@ -17,7 +17,7 @@ class Graph_State(TypedDict):
     skip_retrieve: bool
     context: List[Document]
     answer: str
-    quality: str
+    hallucination: str
     retry_cnt: int
     milvus: Optional[Milvus]
     embedding_model: Optional[Embeddings]
@@ -31,7 +31,7 @@ def init_node(state: Graph_State) -> dict:
         "skip_retrieve": False,
         "context": [],
         "answer": "",
-        "quality": "",
+        "hallucination": "",
         "retry_cnt": 0,
         "milvus": None,
         "embedding_model": None,
@@ -49,7 +49,7 @@ def init_node(state: Graph_State) -> dict:
                 'device': 'cuda' 
             },
             encode_kwargs={
-              'normalize_embeddings': True,    # 벡터 정규화
+                'normalize_embeddings': True,    # 벡터 정규화
             }
         )
         
@@ -217,7 +217,7 @@ def generate_node(state: Graph_State) -> dict:
     llm = state["llm"]
     question = state["question"]
 
-    if state.get("skip_retrieval", False):    # 검색 건너뜀
+    if state.get("skip_retrieve", False):    # 검색 건너뜀
         messages = [
             SystemMessage(content="다음 사용자의 질문에 간단히 한국어로 답변해주세요."),
             HumanMessage(content=question)
@@ -231,14 +231,31 @@ def generate_node(state: Graph_State) -> dict:
     context_docs = state.get("context", [])
     context_text = "\n\n".join([doc.page_content for doc in context_docs])
 
+    base_guideline=f"""
+                        1. 사용자의 질문을 읽고 이해합니다.
+                        2. 제공된 문서에서 질문을 대답하는 데 도움이 되는 정보를 찾습니다.
+                        3. 사용자의 질문에 항상 한국어로 친절하게 답변합니다.
+                        4. 문서에 없는 정보는 **절대** 추가하지 말고, 모른다고 솔직하게 말합니다.
+                    """
+    
+    if state.get("retry_cnt", 0) > 0:
+        hallucination = state["hallucination"]
+        addition_guideline = f"""
+                    {base_guideline}
+                    5. 이전에 생성된 답변에서 다음과 같은 할루시네이션이 발견되었습니다:
+                    {hallucination}
+                    6. 위의 할루시네이션을 다시 생성하지 않도록 유의하며 답변을 생성해 주세요.
+                    """
+        guideline = addition_guideline
+    else:
+        guideline = base_guideline
+        
     messages = [
-        SystemMessage(content="""
-                      당신은 반려견 전문 수의사 챗봇입니다. 아래 지침 단계에 맞게 행동해 주세요.
-                      [지침]
-                      1. 사용자의 질문을 읽고 이해합니다.
-                      2. 제공된 문서에서 질문을 대답하는 데 도움이 되는 정보를 찾습니다.
-                      3. 사용자의 질문에 항상 한국어로 친절하게 답변합니다.
-                      """),
+        SystemMessage(content=f"""
+                        당신은 반려견 전문 수의사입니다. 아래 지침 단계에 맞게 행동해 주세요.
+                        [지침]
+                        {guideline}
+                        """),
         HumanMessage(content=f"[질문] {question}\n\n[참고 문서]\n{context_text}")
     ]
 
@@ -248,17 +265,51 @@ def generate_node(state: Graph_State) -> dict:
 
     return {"answer": answer}
 
-def check_quality_node(state: Graph_State) -> dict:
-    return {"quality": "good"}
+def check_hallucination_node(state: Graph_State) -> dict:
+    if state["skip_retrieve"] == True:
+        print("검색 건너뜀으로 할루시네이션 검증 생략")
+        return {"hallucination": "none"}
 
-# 최종 답변 출력 후 종료 or 재시작
+    if state["retry_cnt"] >= 1:
+        print("재시도 횟수 초과로 할루시네이션 검증 생략")
+        return {"hallucination": "fail"}
+
+    llm = state["llm"]
+    context_docs = state.get("context", [])
+    context_text = "\n\n".join([doc.page_content for doc in context_docs])
+    answer = state["answer"]
+
+    messages = [
+        SystemMessage(content="""
+                        당신은 반려견 전문 수의사의 답변을 검토하는 직원입니다. 아래 지침 단계에 맞게 행동해 주세요.
+                        [지침]
+                        1. 참고 문서를 읽습니다.
+                        2. 수의사에 의해 생성된 답변을 읽습니다.
+                        3. 답변의 내용에 참고 문서에는 없는 정보 즉, **할루시네이션**이 포함되어 있는지 검토합니다.
+                            - 정보가 사소히 다르거나 표현이 부드럽게 바뀌었더라도, 해당 내용이 문서 내 의미와 관련성이 있으면 환각이 아닙니다.
+                            - 지엽적인 표현, 파생어, 동의어 또는 설명 방식의 차이만으로 환각이라고 판단하지 말아주세요. 실제로 문맥에 없는 핵심 정보만 환각으로 평가합니다.
+                            - 문헌에 근거하지 않은 주장이나, 원문에 없는 정보를 추가로 만든 경우에만 환각 처리하세요.
+                        4. 할루시네이션이 없다면 'none', 있다면 정확히 어떤 부분에 할루시네이션이 있었는지 답변합니다.
+                        """),
+        HumanMessage(content=f"[참고 문서]\n{context_text}\n\n[생성된 답변]\n{answer}")
+    ]
+
+    print("\n[LLM 기반 할루시네이션 검증 중...]")
+    response = llm.invoke(messages)
+    hallucination = response.content.strip()
+
+    return {"hallucination": hallucination}
+
+# 최종 답변 출력 후 재시작
 def output_node(state: Graph_State) -> dict:
     answer = state["answer"]
     print(f"[응답] {answer}")
     pass
 
 def fallback_node(state: Graph_State) -> dict:
-    pass
+    answer = "죄송합니다. 현재 질문에 관한 정보를 찾지 못 했습니다. 더 구체적인 질문으로 다시 시도하거나 다른 질문을 해 주세요."
+    print(f"[응답] {answer}")
+    return {"answer": answer}
 
 # 워크플로우 정의 (MemorySaver 사용하기)
 def workflow():
@@ -268,7 +319,7 @@ def workflow():
     graph.add_node("input_node", input_node)
     graph.add_node("retriever_node", retriever_node)
     graph.add_node("generate_node", generate_node)
-    graph.add_node("check_quality_node", check_quality_node)
+    graph.add_node("check_hallucination_node", check_hallucination_node)
     graph.add_node("output_node", output_node)
     graph.add_node("fallback_node", fallback_node)
 
@@ -277,44 +328,47 @@ def workflow():
     graph.add_edge("init_node", "input_node")
 
     def dedicate_quit(state: Graph_State) -> bool:
-      if state["question"].lower() == "quit":
-          print("프로그램을 종료합니다.")
-          return "QUIT"
-      else:
-          if state["skip_retrieve"] == False:
-              return "RELEVANT"
-          else:
-              print("검색 단계를 건너뜁니다.")
-              return "UNRELEVANT"
+        if state["question"].lower() == "quit":
+            print("프로그램을 종료합니다.")
+            return "QUIT"
+        else:
+            if state["skip_retrieve"] == False:
+                return "RELEVANT"
+            else:
+                print("검색 단계를 건너뜁니다.")
+                return "UNRELEVANT"
 
     graph.add_conditional_edges("input_node",
                                 dedicate_quit,
-                                  {
+                                    {
                                     "RELEVANT": "retriever_node",
                                     "UNRELEVANT": "generate_node",
                                     "QUIT" : END
-                                  }
+                                    }
                                 )
     graph.add_edge("retriever_node", "generate_node")
-    graph.add_edge("generate_node", "check_quality_node")
+    graph.add_edge("generate_node", "check_hallucination_node")
 
-    def dedicate_review(state: Graph_State) -> str:
-      if state["quality"] == "good":
-          return "GOOD"
-      elif state["quality"] == "bad":
-          return "BAD"
-      else:
-          if state["retry_cnt"] >= 1:
-              print("재시도 횟수 초과")
-              return "FAIL"
+    def dedicate_retry(state: Graph_State) -> str:
+        if state["hallucination"] == "none":
+            print("할루시네이션 없음")
+            return "NONE"
+        else:
+            if state["retry_cnt"] >= 1:
+                print("재시도 횟수 초과")
+                return "FAIL"
+            state["retry_cnt"] += 1
+            print(f"할루시네이션 발견: {state['hallucination']}. 답변을 재생성합니다.")
+            return "EXIST"
+            
 
-    graph.add_conditional_edges("check_quality_node",
-                                dedicate_review,
-                                  {
-                                    "GOOD": "output_node",
-                                    "BAD": "generate_node",
+    graph.add_conditional_edges("check_hallucination_node",
+                                dedicate_retry,
+                                    {
+                                    "NONE": "output_node",
+                                    "EXIST": "generate_node",
                                     "FAIL": "fallback_node"
-                                  }
+                                    }
                                 )
     graph.add_edge("output_node", "input_node")
     graph.add_edge("fallback_node", "input_node")
@@ -325,7 +379,7 @@ def workflow():
 def draw_workflow(app):
     try:
         png_data = app.get_graph().draw_mermaid_png()
-        with open("my_rag_workflow.png", "wb") as f:
+        with open("my_agent_workflow.png", "wb") as f:
             f.write(png_data)
 
         print("그래프가 성공적으로 저장되었습니다.")
@@ -334,7 +388,7 @@ def draw_workflow(app):
 
 def main():
     app = workflow()
-    # draw_workflow(app)
+    draw_workflow(app)
 
     initial_state = {}
     app.invoke(initial_state)
