@@ -28,9 +28,18 @@ html, body {
   flex-direction: column;
 }
 
+.page-center img {
+  max-width: 256px;
+  width: 25vW;
+  margin-top: -23vh;
+  margin-bottom: 2vh;
+  border: #ddd solid 3px;
+  border-radius: 20%;
+}
+
 .input-guide {
   color: #eee;
-  font-size: 1.7rem;
+  font-size: clamp(1rem, 4vw, 1.7rem);
   font-weight: 500;
   margin-bottom: 24px;
   text-align: center;
@@ -42,15 +51,16 @@ html, body {
   background: none;
   border: none;
   outline: none;
-  width: 80vw;
+  width: 25vw;
+  height: 5vh;
   max-width: 700px;
   min-width: 250px;
-  max-height: 216px;
-  min-height: 40px;
+  max-height: 20vh;
+  min-height: 30px;
   padding: 12px 32px;
   padding-right: 60px;
   line-height: 2;
-  font-size: 1.2rem;
+  font-size: clamp(0.8rem, 3vw, 1.2rem);
   font-weight: 500;
   border-radius: 30px;
   box-shadow: inset 2px 5px 10px rgb(5, 5, 5);
@@ -62,17 +72,7 @@ html, body {
 }
 
 .input::-webkit-scrollbar {
-  width: 4px;
-}
-
-.input::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 24px;
-}
-
-.input::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  width: 0px;
 }
 
 .input-container {
@@ -82,8 +82,8 @@ html, body {
 .send-icon {
   position: absolute;
   right: 1vw;
-  bottom: 1vw;
-  font-size: 24px;
+  bottom: 2vh;
+  font-size: clamp(1px, 6vw, 24px);
   color: #eee;
   cursor: pointer;
   transition: color 0.2s ease;
