@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import CurvedLoop from '../components/CurvedLoop';
 import './HomePage.css'
 import { IoMdSend } from "react-icons/io";
+import logo from "../assets/dog_256.png"
 
 const HomePage = () => {
     const textareaRef = useRef(null);
@@ -51,6 +52,7 @@ const HomePage = () => {
                 direction="left"
             />
             <div className="page-center">
+                <img src={logo} alt="강아지 로고" className="logo-style" />
                 <div className="input-guide">
                     반려견에 대해 궁금한 것이 있으신가요?
                 </div>
