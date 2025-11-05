@@ -1,8 +1,11 @@
+import RegisterForm from '../components/RegisterForm'
+import './LoginPage.css'
+
 const RegisterPage = () => {
     return(
-        <>
-            <p>RegisterPage</p>
-        </>
+        <div className="login-page-container">
+            <RegisterForm />
+        </div>
     );
 };
 

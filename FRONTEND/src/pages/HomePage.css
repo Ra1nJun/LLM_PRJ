@@ -1,4 +1,5 @@
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -17,20 +18,21 @@ html, body {
   top: 40%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 2;
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-direction: column;
+
   width: 100%;
   height: auto;
   padding: 0 20px;
   box-sizing: border-box;
-  flex-direction: column;
+  z-index: 2;
 }
 
 .page-center img {
   max-width: 256px;
-  width: 25vW;
+  width: 25vw;
   margin-top: -23vh;
   margin-bottom: 2vh;
   border: #ddd solid 3px;
@@ -39,56 +41,78 @@ html, body {
 
 .input-guide {
   color: #eee;
+  font-family: system-ui;
+  text-align: center;
+  margin-bottom: 24px;
   font-size: clamp(1rem, 4vw, 1.7rem);
   font-weight: 500;
-  margin-bottom: 24px;
-  text-align: center;
-  font-family: system-ui
-}
-
-.input {
-  margin: 0;
-  background: none;
-  border: none;
-  outline: none;
-  width: 25vw;
-  height: 5vh;
-  max-width: 700px;
-  min-width: 250px;
-  max-height: 20vh;
-  min-height: 30px;
-  padding: 12px 32px;
-  padding-right: 60px;
-  line-height: 2;
-  font-size: clamp(0.8rem, 3vw, 1.2rem);
-  font-weight: 500;
-  border-radius: 30px;
-  box-shadow: inset 2px 5px 10px rgb(5, 5, 5);
-  color: #eee;
-  resize: none;
-  overflow-wrap: break-word;
-  overflow-y: auto;
-  font-family: system-ui;
-}
-
-.input::-webkit-scrollbar {
-  width: 0px;
 }
 
 .input-container {
   position: relative;
 }
 
+.queryinput {
+  margin: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: system-ui;
+  color: #eee;
+  width: 25vw;
+  height: 5vh;
+  min-width: 250px;
+  max-width: 700px;
+  min-height: 20px;
+  max-height: 20vh;
+  line-height: 2;
+  font-size: clamp(0.95rem, 3vw, 1.2rem);
+  font-weight: 500;
+  padding: 12px 32px;
+  padding-right: 60px;
+  border-radius: 30px;
+  box-shadow: inset 2px 5px 10px rgb(5, 5, 5);
+  resize: none;
+  overflow-wrap: break-word;
+  overflow-y: auto;
+}
+
+/* 입력 필드 스크롤바 숨기기 */
+.queryinput::-webkit-scrollbar {
+  width: 0px;
+}
+
+/* 5-4. 전송 아이콘 */
 .send-icon {
   position: absolute;
-  right: 1vw;
-  bottom: 2vh;
-  font-size: clamp(1px, 6vw, 24px);
   color: #eee;
   cursor: pointer;
+  font-size: clamp(1px, 6vw, 24px);
+  right: 1vw;
+  bottom: 2vh;
   transition: color 0.2s ease;
 }
 
 .send-icon:hover {
   color: #aaa;
+}
+
+@media (max-width: 2000px) {
+  /* 6-1. 이미지 크기 조정 */
+  .page-center img {
+    width: 15vw;
+    max-width: 128px;
+    margin-top: -18vh;
+  }
+  /* 6-2. 입력 필드 (Input Area) 크기 조정 */
+  .queryinput {
+    width: 35vw;
+    min-width: 300px;
+    height: 6vh;
+  }
+  /* 6-3. 전송 아이콘 위치 조정 */
+  .send-icon {
+    right: 1vw;
+    bottom: 3.5vh;
+  }
 }
