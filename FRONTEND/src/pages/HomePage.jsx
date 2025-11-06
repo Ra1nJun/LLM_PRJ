@@ -63,7 +63,7 @@ const HomePage = () => {
                 <div className="input-container">
                     <textarea
                         ref={textareaRef}
-                        placeholder="반려견의 성장 & 질병에 관해 물어보세요! (최대 700자)"
+                        placeholder="반려견의 성장 & 질병에 관해 물어보세요!"
                         className="queryinput"
                         name="text"
                         rows={1}

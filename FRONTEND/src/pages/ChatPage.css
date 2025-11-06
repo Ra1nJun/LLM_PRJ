@@ -19,17 +19,7 @@
   margin-bottom: 12px;
 }
 .chat-window::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-window::-webkit-scrollbar-thumb {
-  background-color: rgba(217, 135, 77, 0.4);
-  border-radius: 3px;
-  transition: opacity 0.3s;
-}
-
-.chat-window::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(217, 135, 77, 0.8);
+  display: none;
 }
 
 .loading {

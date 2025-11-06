@@ -9,38 +9,38 @@ const RegisterForm = () => {
       </div>
       
       <form className='register'>
-        <label>Full Name</label>
+        <label>Name</label>
         <input 
           type="text" 
-          placeholder="Enter Name" 
+          placeholder="이름을 입력하세요." 
           required 
         />
         <label>Email</label>
         <input 
           type="email"
-          placeholder="Enter Email"
+          placeholder="이메일을 입력하세요."
           required
         />
         <label>Password</label>
         <input 
           type="password"
-          placeholder="Enter A Password"
+          placeholder="비밀번호를 입력하세요."
           required
         />
         <label>Confirm Password</label>
         <input 
           type="password" 
-          placeholder="Re-Enter Password" 
+          placeholder="비밀번호를 재입력하세요." 
           required 
         />
         <input 
           type="button" 
-          value="Signup" 
+          value="회원가입" 
         />
         
         <span> 
-          Already a member?
-          <Link to="/login"> Login Here</Link>
+          계정이 있으신가요?
+          <Link to="/login"> 로그인</Link>
         </span>
       </form>
     </div>

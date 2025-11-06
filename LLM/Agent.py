@@ -310,7 +310,7 @@ def check_hallucination_node(state: Graph_State) -> dict:
 
     return {"hallucination": hallucination}
 
-def _remove_markdown(self, text: str) -> str:
+def remove_markdown(text: str) -> str:
     """마크다운 형식을 제거하는 함수"""
     import re
 
@@ -328,11 +328,11 @@ def _remove_markdown(self, text: str) -> str:
 
 # 최종 답변 출력 후 재시작
 def output_node(state: Graph_State) -> dict:
-    answer = state["answer"]
-    final_answer=_remove_markdown(answer)
+    answer = state.get("answer")
+    final_answer=remove_markdown(answer)
 
     print(f"[응답] {final_answer}")
-    return {"answer": answer}
+    return {"answer": final_answer}
 
 def fallback_node(state: Graph_State) -> dict:
     answer = "죄송합니다. 현재 질문에 관한 정보를 찾지 못 했습니다. 더 구체적인 질문으로 다시 시도하거나 다른 질문을 해 주세요."

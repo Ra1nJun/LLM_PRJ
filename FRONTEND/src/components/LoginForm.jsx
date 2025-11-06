@@ -23,7 +23,7 @@ const LoginForm = () => {
             ></path>
           </g>
         </svg>
-        <input type="text" className="formInput" placeholder="Enter your Email" />
+        <input type="text" className="formInput" placeholder="이메일을 입력해주세요." />
       </div>
 
       <div className="flex-column">
@@ -43,17 +43,17 @@ const LoginForm = () => {
             d="m304 224c-8.832031 0-16-7.167969-16-16v-80c0-52.929688-43.070312-96-96-96s-96 43.070312-96 96v80c0 8.832031-7.167969 16-16 16s-16-7.167969-16-16v-80c0-70.59375 57.40625-128 128-128s128 57.40625 128 128v80c0 8.832031-7.167969 16-16 16zm0 0"
           ></path>
         </svg>
-        <input type="password" className="formInput" placeholder="Enter your Password" />
+        <input type="password" className="formInput" placeholder="비밀번호를 입력해주세요." />
       </div>
 
       <div className="flex-row">
-        <span className="span">Forgot password?</span>
+        <span className="span">비밀번호를 잊으셨나요?</span>
       </div>
 
-      <button className="button-submit">Sign In</button>
+      <button className="button-submit">로그인</button>
       
       <p className="p">
-        Don't have an account? <Link to="/register" className="span">Sign Up</Link>
+        계정이 없으신가요? <Link to="/register" className="span">회원가입</Link>
       </p>
       <p className="p line">Or With</p> 
 
