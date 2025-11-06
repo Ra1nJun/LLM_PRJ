@@ -16,7 +16,6 @@ dependencies = [
     "pymilvus>=2.6.2",
     "pymupdf>=1.26.4",
     "transformers>=4.40.2",
-    "torch>=2.9.0", # GPU 버전 사용으로 설치를 따로 해야함 -> [uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126]
-    "torchvision>=0.24.0", # 위와 같이 설치됨
     "elasticsearch>=9.1.1",
 ]
+# torch는 GPU 버전 사용으로 삭제했다가 다시 설치를 해야함 -> 예시: [uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126]

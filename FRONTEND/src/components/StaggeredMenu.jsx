@@ -1,6 +1,7 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import './StaggeredMenu.css';
+import { Link } from 'react-router-dom';
 
 export const StaggeredMenu = ({
   position = 'right',
@@ -332,7 +333,7 @@ export const StaggeredMenu = ({
       </div>
       <header className="staggered-menu-header" aria-label="Main navigation header">
         <div className="sm-logo" aria-label="Logo">
-          <h2>HARU DANG</h2>
+          <Link to='/' style={{ textDecoration: 'none' }}><h2 style={{ color: '#eee' }}>HARU DANG</h2></Link>
         </div>
         <button
           ref={toggleBtnRef}

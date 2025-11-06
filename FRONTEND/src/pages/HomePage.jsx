@@ -1,4 +1,6 @@
 import { useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '../context/ToastContext';
 import CurvedLoop from '../components/CurvedLoop';
 import './HomePage.css'
 import { IoMdSend } from "react-icons/io";
@@ -6,6 +8,8 @@ import logo from "../assets/dog_256.png"
 
 const HomePage = () => {
     const textareaRef = useRef(null);
+    const navigate = useNavigate();
+    const { showToast } = useToast();
 
     useEffect(() => {
         if (textareaRef.current) {
@@ -26,13 +30,13 @@ const HomePage = () => {
     };
 
     const handleSubmit = () => {
-        const text = textareaRef.current?.value;
-        if (text?.trim()) {
-            console.log('제출된 텍스트:', text);
-            // TODO: 여기에 제출 로직 추가
-            textareaRef.current.value = '';  // 입력창 초기화
-            textareaRef.current.style.height = '40px';  // 높이 초기화
+        const text = textareaRef.current?.value.trim();
+        if (!text) {
+            showToast("입력값이 비어 있습니다.");
+            return;
         }
+
+        navigate('/chat', { state: { userInput: text } });
     };
 
     const handleKeyPress = (e) => {
@@ -60,7 +64,7 @@ const HomePage = () => {
                     <textarea
                         ref={textareaRef}
                         placeholder="반려견의 성장 & 질병에 관해 물어보세요! (최대 700자)"
-                        className="input"
+                        className="queryinput"
                         name="text"
                         rows={1}
                         onInput={handleInput}

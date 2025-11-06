@@ -388,7 +388,7 @@ def draw_workflow(app):
 
 def main():
     app = workflow()
-    draw_workflow(app)
+    # draw_workflow(app)
 
     initial_state = {}
     app.invoke(initial_state)
