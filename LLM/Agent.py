@@ -22,11 +22,13 @@ class Graph_State(TypedDict):
     milvus: Optional[Milvus]
     embedding_model: Optional[Embeddings]
     llm: Optional[BaseLLM]
+    one_way: bool
 
 # 실행 준비
 def init_node(state: Graph_State) -> dict:
-    # 데이터 초기화
-    initial_state = {
+    current_state = dict(state)
+
+    default_state = {
         "question": "",
         "skip_retrieve": False,
         "context": [],
@@ -36,7 +38,11 @@ def init_node(state: Graph_State) -> dict:
         "milvus": None,
         "embedding_model": None,
         "llm": None,
+        "one_way": False
     }
+
+    merge_state = default_state
+    merge_state.update(current_state)
 
     # 임베딩 모델 로드
     try:
@@ -53,7 +59,7 @@ def init_node(state: Graph_State) -> dict:
             }
         )
         
-        initial_state["embedding_model"] = embedding_model
+        merge_state["embedding_model"] = embedding_model
         print(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 성공")
     except Exception as e:
         print(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 실패: {e}")
@@ -72,7 +78,7 @@ def init_node(state: Graph_State) -> dict:
             vector_field="vector", # 벡터 필드 이름
             index_params={"metric_type": "COSINE"}
         )
-        initial_state["milvus"] = milvus
+        merge_state["milvus"] = milvus
         print(f"Milvus 연결 성공: {MILVUS_HOST}")
     except Exception as e:
         print(f"Milvus 연결 실패: {e}")
@@ -86,20 +92,23 @@ def init_node(state: Graph_State) -> dict:
 
         # 모델 설정
         llm = ChatGroq(model_name=LLM_MODEL, temperature=TEMP, api_key=GROQ_API_KEY)
-        initial_state["llm"] = llm
+        merge_state["llm"] = llm
         print(f"LLM 모델({LLM_MODEL}) 로드 성공")
     except Exception as e:
         print(f"LLM 모델({LLM_MODEL}) 로드 실패: {e}")
         exit(1)
 
-    return initial_state
+    return merge_state
 
 # 사용자에게 질문 받기
 def input_node(state: Graph_State) -> dict:
-    user_input = input("증상을 입력하세요(종료하고 싶다면 quit): ")
-    if user_input.lower() == "quit":
-        return {"question": "quit"}
-    
+    if state["one_way"] == False:
+        user_input = input("증상을 입력하세요(종료하고 싶다면 quit): ")
+        if user_input.lower() == "quit":
+            return {"question": "quit"}
+    else:
+        user_input = state["question"]
+
     llm = state["llm"]
     messages = [
         SystemMessage(content=
@@ -255,6 +264,7 @@ def generate_node(state: Graph_State) -> dict:
                         당신은 반려견 전문 수의사입니다. 아래 지침 단계에 맞게 행동해 주세요.
                         [지침]
                         {guideline}
+                        **중요! ###이나 표, **같은 마크다운 형식으로 대답하지 마세요!**
                         """),
         HumanMessage(content=f"[질문] {question}\n\n[참고 문서]\n{context_text}")
     ]
@@ -300,11 +310,29 @@ def check_hallucination_node(state: Graph_State) -> dict:
 
     return {"hallucination": hallucination}
 
+def _remove_markdown(self, text: str) -> str:
+    """마크다운 형식을 제거하는 함수"""
+    import re
+
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)  # 코드 블록 제거 (```...```)
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # 인라인 코드 제거 (`...`)
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # 굵은 글씨 제거 (**...**)
+    text = re.sub(r'__([^_]+)__', r'\1', text)  # 굵은 글씨 제거 (__...__)
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # 기울임 글씨 제거 (*...*)
+    text = re.sub(r'_([^_]+)_', r'\1', text)  # 기울임 글씨 제거 (_..._)
+    text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)  # 제목 제거 (# ## ###)
+    text = re.sub(r'^[-*]{3,}$', '', text, flags=re.MULTILINE)  # 수평선 제거 (--- ***)
+    text = re.sub(r'^\s*#{1,6}\s*', '', text, flags=re.MULTILINE)  # 앞에 공백이 있는 헤더도 제거
+
+    return text
+
 # 최종 답변 출력 후 재시작
 def output_node(state: Graph_State) -> dict:
     answer = state["answer"]
-    print(f"[응답] {answer}")
-    pass
+    final_answer=_remove_markdown(answer)
+
+    print(f"[응답] {final_answer}")
+    return {"answer": answer}
 
 def fallback_node(state: Graph_State) -> dict:
     answer = "죄송합니다. 현재 질문에 관한 정보를 찾지 못 했습니다. 더 구체적인 질문으로 다시 시도하거나 다른 질문을 해 주세요."
@@ -327,7 +355,7 @@ def workflow():
 
     graph.add_edge("init_node", "input_node")
 
-    def dedicate_quit(state: Graph_State) -> bool:
+    def dedicate_quit(state: Graph_State) -> str:
         if state["question"].lower() == "quit":
             print("프로그램을 종료합니다.")
             return "QUIT"
@@ -341,11 +369,11 @@ def workflow():
     graph.add_conditional_edges("input_node",
                                 dedicate_quit,
                                     {
-                                    "RELEVANT": "retriever_node",
-                                    "UNRELEVANT": "generate_node",
-                                    "QUIT" : END
+                                        "RELEVANT": "retriever_node",
+                                        "UNRELEVANT": "generate_node",
+                                        "QUIT" : END
                                     }
-                                )
+    )
     graph.add_edge("retriever_node", "generate_node")
     graph.add_edge("generate_node", "check_hallucination_node")
 
@@ -365,12 +393,24 @@ def workflow():
     graph.add_conditional_edges("check_hallucination_node",
                                 dedicate_retry,
                                     {
-                                    "NONE": "output_node",
-                                    "EXIST": "generate_node",
-                                    "FAIL": "fallback_node"
+                                        "NONE": "output_node",
+                                        "EXIST": "generate_node",
+                                        "FAIL": "fallback_node"
                                     }
-                                )
-    graph.add_edge("output_node", "input_node")
+    )
+    
+    def dedicate_again(state: Graph_State) -> str:
+        if state["one_way"] == True:
+            return "EXTERNAL"
+        else:
+            return "INTERNAL"
+    graph.add_conditional_edges("output_node",
+                                dedicate_again,
+                                    {
+                                        "EXTERNAL": END,
+                                        "INTERNAL": "input_node"
+                                    }
+    )
     graph.add_edge("fallback_node", "input_node")
 
     return graph.compile()
@@ -385,6 +425,13 @@ def draw_workflow(app):
         print("그래프가 성공적으로 저장되었습니다.")
     except Exception as e:
         print(f"이미지 생성 중 오류가 발생했습니다: {e}")
+
+# 외부 호출용 함수
+async def run(querry):
+    app = workflow()
+    initial_state = {"question" : querry, "one_way": True}
+    final_state = app.invoke(initial_state)
+    return final_state["answer"]
 
 def main():
     app = workflow()

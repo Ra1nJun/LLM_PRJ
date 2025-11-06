@@ -33,7 +33,7 @@ const ChatPage = () => {
   const sendMessageToBackend = async (text) => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/chat", {
+      const res = await fetch("http://localhost:8000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
@@ -42,7 +42,7 @@ const ChatPage = () => {
 
       const botMessage = {
         id: Date.now() + 1,
-        text: data.reply || "응답을 불러올 수 없습니다.",
+        text: data.answer || "응답을 불러올 수 없습니다.",
         sender: "bot",
       };
       setMessages((prev) => [...prev, botMessage]);
