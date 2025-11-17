@@ -1,12 +1,14 @@
 from sqlalchemy.orm import Session
-from BACKEND.app import models, schemas, auth
+from BACKEND.app.models.user import User
+from BACKEND.app.schemas import user as UserSchema
+from BACKEND.app.core import security
 
-def get_user_by_username(db: Session, username: str):
-    return db.query(models.User).filter(models.User.username == username).first()
+def get_user_by_email(db: Session, email: str):
+    return db.query(User).filter(User.email == email).first()
 
-def create_user(db: Session, user: schemas.UserCreate):
-    hashed_pw = auth.hash_password(user.password)
-    db_user = models.User(username=user.username, email=user.email, hashed_password=hashed_pw)
+def create_user(db: Session, user: UserSchema.UserCreate):
+    hashed_pw = security.hash_password(user.password)
+    db_user = User(username=user.username, email=user.email, password=hashed_pw)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)

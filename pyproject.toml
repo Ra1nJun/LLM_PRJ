@@ -19,5 +19,11 @@ dependencies = [
     "elasticsearch>=9.1.1",
     "fastapi>=0.121.0",
     "uvicorn>=0.38.0",
+    "pymysql>=1.1.2",
+    "pydantic[email]>=2.12.3",
+    "python-jose>=3.5.0",
+    "python-multipart>=0.0.20",
+    "passlib>=1.7.4",
+    "bcrypt==4.3.0",
 ]
 # torch는 GPU 버전 사용으로 삭제했다가 다시 설치를 해야함 -> 예시: [uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126]
