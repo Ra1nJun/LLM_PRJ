@@ -6,7 +6,7 @@ from BACKEND.app.crud import user as crud_user
 
 router = APIRouter()
 
-@router.post("",response_model=UserResponse)
+@router.post("")
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     crud_user.create_user(db, user)
     return {"message": "Registered successfully"}

@@ -20,7 +20,7 @@ const HomePage = () => {
     const handleInput = () => {
         const textarea = textareaRef.current;
         if (textarea) {
-            textarea.style.height = '0px'; // 완전히 초기화
+            textarea.style.height = '0px';
             const scrollHeight = textarea.scrollHeight;
             const computedStyle = window.getComputedStyle(textarea);
             const paddingTop = parseFloat(computedStyle.paddingTop);
@@ -32,7 +32,7 @@ const HomePage = () => {
     const handleSubmit = () => {
         const text = textareaRef.current?.value.trim();
         if (!text) {
-            showToast("입력값이 비어 있습니다.");
+            showToast("입력값이 비어 있습니다.", "warning");
             return;
         }
 
@@ -41,7 +41,7 @@ const HomePage = () => {
 
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();  // 기본 줄바꿈 동작 방지
+            e.preventDefault();
             handleSubmit();
         }
     };

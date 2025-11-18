@@ -81,7 +81,7 @@
 }
 
 .button-submit {
-  margin: 20px 0 10px 0;
+  margin: 30px 0 10px 0;
   background-color: #2d79f3;
   border: none;
   color: white;
@@ -98,6 +98,10 @@
   color: #f1f1f1;
   font-size: 14px;
   margin: 5px 0;
+}
+.p a {
+  text-decoration: none;
+  color: #2d79f3
 }
 
 .btn {

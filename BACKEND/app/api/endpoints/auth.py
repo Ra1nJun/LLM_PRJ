@@ -15,7 +15,7 @@ def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), 
         raise HTTPException(status_code=400, detail="Invalid id or password")
 
     access_token = create_access_token(data={"sub": user.email})
-    response.set_cookie(key="access_token", value=access_token, httponly=True, max_age=60*60, samesite="strict", secure=True)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, max_age=60*60, samesite="none", secure=True)
     return {"message": "Logged in successfully"}
 
 @router.post("/logout")
@@ -25,4 +25,4 @@ def logout(response: Response):
 
 @router.get("/me")
 async def token_validation(current_user=Depends(get_current_user)):
-    return Response(status_code=204)
+    return {"loggedIn": True}

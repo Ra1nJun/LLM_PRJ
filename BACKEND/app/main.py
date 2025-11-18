@@ -10,7 +10,7 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-origins = ["http://localhost:5173"]
+origins = ["https://localhost:5173"]
 
 app.add_middleware(
     CORSMiddleware,

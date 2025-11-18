@@ -2,11 +2,45 @@ import './LoginForm.css';
 import googleLogo from '../assets/google_logo.png';
 import kakaoLogo from '../assets/kakao_logo.png';
 import naverLogo from '../assets/naver_logo.png';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { login } from '../api/authApi';
+import { useToast } from '../context/ToastContext';
+import { useState } from "react";
 
 const LoginForm = () => {
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+      email: "",
+      password: ""
+    });
+
+    const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e) => {
+      e.preventDefault();
+  
+      try {
+        await login(
+          formData.email,
+          formData.password
+        );
+  
+        showToast("로그인 성공!", "success");
+        navigate("/");
+      } catch (error) {
+        console.error(error);
+        showToast("로그인 실패", "error");
+      }
+    };
+
   return (
-    <form className="form">
+    <form className="form" onSubmit={handleSubmit}>
       <div className="flex-column">
         <label>Email</label>
       </div>
@@ -23,7 +57,15 @@ const LoginForm = () => {
             ></path>
           </g>
         </svg>
-        <input type="text" className="formInput" placeholder="이메일을 입력해주세요." />
+        <input
+          type="email"
+          name="email"
+          className="formInput"
+          placeholder="이메일을 입력해주세요."
+          value={formData.email}
+          onChange={handleChange}
+          required
+        />
       </div>
 
       <div className="flex-column">
@@ -43,17 +85,21 @@ const LoginForm = () => {
             d="m304 224c-8.832031 0-16-7.167969-16-16v-80c0-52.929688-43.070312-96-96-96s-96 43.070312-96 96v80c0 8.832031-7.167969 16-16 16s-16-7.167969-16-16v-80c0-70.59375 57.40625-128 128-128s128 57.40625 128 128v80c0 8.832031-7.167969 16-16 16zm0 0"
           ></path>
         </svg>
-        <input type="password" className="formInput" placeholder="비밀번호를 입력해주세요." />
+        <input
+          type="password"
+          name="password"
+          className="formInput"
+          placeholder="비밀번호를 입력해주세요."
+          value={formData.password}
+          onChange={handleChange}
+          required
+        />
       </div>
 
-      <div className="flex-row">
-        <span className="span">비밀번호를 잊으셨나요?</span>
-      </div>
-
-      <button className="button-submit">로그인</button>
+      <button className="button-submit" type="submit">로그인</button>
       
       <p className="p">
-        계정이 없으신가요? <Link to="/register" className="span">회원가입</Link>
+        계정이 없으신가요? <Link to="/register">회원가입</Link>
       </p>
       <p className="p line">Or With</p> 
 

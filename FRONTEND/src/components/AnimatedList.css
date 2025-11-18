@@ -17,9 +17,10 @@
   padding: 12px 16px;
   border-radius: 16px;
   color: #eee;
-  font-size: 15px;
+  font-size: 20px;
   word-break: break-word;
   white-space: pre-wrap;
+  font-family: 'Segoe UI', 'Roboto', 'Noto Sans', sans-serif;
 }
 
 .chat-bubble.user {
@@ -29,7 +30,7 @@
 }
 
 .chat-bubble.bot {
-  background-color: #d9874d;
+  background-color: #D07135;
   align-self: flex-start;
   border-bottom-left-radius: 4px;
 }

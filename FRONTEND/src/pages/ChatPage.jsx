@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import AnimatedList from "../components/AnimatedList";
 import "./ChatPage.css";
 import { IoMdSend } from "react-icons/io";
+import { chat } from "../api/chatApi";
 
 const ChatPage = () => {
   const [messages, setMessages] = useState([]); // 대화 리스트
@@ -33,16 +34,11 @@ const ChatPage = () => {
   const sendMessageToBackend = async (text) => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
-      });
-      const data = await res.json();
+      const res = await chat(text);
 
       const botMessage = {
         id: Date.now() + 1,
-        text: data.answer || "응답을 불러올 수 없습니다.",
+        text: res.data.answer || "응답을 불러올 수 없습니다.",
         sender: "bot",
       };
       setMessages((prev) => [...prev, botMessage]);

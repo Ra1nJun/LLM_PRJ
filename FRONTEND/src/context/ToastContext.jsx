@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback } from "react";
-import Toast from "../components/Toast"; // 아까 만든 Toast.jsx 컴포넌트 import
+import Toast from "../components/Toast";
 
 const ToastContext = createContext();
 
@@ -7,16 +7,15 @@ export const ToastProvider = ({ children }) => {
   const [toast, setToast] = useState(null);
 
   // ✅ toast 보여주는 함수
-  const showToast = useCallback((message, duration = 3000) => {
-    console.log("[ToastProvider] showToast called with:", message);
-    setToast(message);
+  const showToast = useCallback((message, type = "default", duration = 3000) => {
+    setToast({ message, type });
     setTimeout(() => setToast(null), duration);
   }, []);
 
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {toast && <Toast message={toast} />}
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </ToastContext.Provider>
   );
 };
