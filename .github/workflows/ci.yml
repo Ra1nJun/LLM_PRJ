@@ -20,7 +20,7 @@ jobs:
           activate-environment: true
 
       # 의존성 설치
-      - name: Install build dependencies
+      - name: Install pip
         run: uv pip install --upgrade pip  # pip 최신화
         
       - name: Install PyTorch with CUDA 12.6 
