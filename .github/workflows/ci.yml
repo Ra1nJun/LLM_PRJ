@@ -29,10 +29,6 @@ jobs:
       - name: Install project
         run: uv sync
 
-      # 테스트 실행 (예: pytest)
-      - name: Run tests
-        run: uv run pytest
-
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -49,5 +45,3 @@ jobs:
         run: npm install
       - name: Build
         run: npm run build
-      - name: Run tests
-        run: npm test

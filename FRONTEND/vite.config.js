@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import fs from 'fs';
 
-const isCI = process.env.CI === 'true';
+const isCI = process.env.CI === 'true'; // GitHub Actions 전용 설정
 
 // https://vite.dev/config/
 export default defineConfig({
