@@ -122,7 +122,6 @@ def input_node(state: Graph_State) -> dict:
         HumanMessage(content=user_input)
     ]
 
-    print("\n[LLM에게 요약 요청 중...]")
     response = llm.invoke(messages)  # LLM에게 메시지 전달
     judgment = response.content.strip()
 

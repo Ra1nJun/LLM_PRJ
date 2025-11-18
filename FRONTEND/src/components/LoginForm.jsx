@@ -32,7 +32,7 @@ const LoginForm = () => {
         );
   
         showToast("로그인 성공!", "success");
-        navigate("/");
+        navigate("/", { state: { loggedIn: true } });
       } catch (error) {
         console.error(error);
         showToast("로그인 실패", "error");
