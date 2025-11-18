@@ -19,12 +19,15 @@ jobs:
         with:
           activate-environment: true
 
-      # 의존성 설치 (pyproject.toml 기반 자동 설치)
-      - name: Install dependencies
-        run: uv pip install --upgrade pip  # pip 최신화(선택)
+      # 의존성 설치
+      - name: Install build dependencies
+        run: uv pip install --upgrade pip  # pip 최신화
         
-      - name: Build backend code (optional)
-        run: uv run python -m build  # 필요시 패키지 빌드
+      - name: Install PyTorch with CUDA 12.6 
+        run: uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+
+      - name: Install project
+        run: uv sync
 
       # 테스트 실행 (예: pytest)
       - name: Run tests
@@ -43,7 +46,7 @@ jobs:
         with:
           node-version: '24'
       - name: Install dependencies
-        run: npm ci
+        run: npm install
       - name: Build
         run: npm run build
       - name: Run tests
