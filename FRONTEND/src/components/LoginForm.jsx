@@ -39,6 +39,11 @@ const LoginForm = () => {
       }
     };
 
+  const handleFake = (e) => {
+    e.preventDefault();
+    showToast("준비중인 기능입니다.");
+  };
+
   return (
     <form className="form" onSubmit={handleSubmit}>
       <div className="flex-column">
@@ -64,7 +69,6 @@ const LoginForm = () => {
           placeholder="이메일을 입력해주세요."
           value={formData.email}
           onChange={handleChange}
-          required
         />
       </div>
 
@@ -92,7 +96,6 @@ const LoginForm = () => {
           placeholder="비밀번호를 입력해주세요."
           value={formData.password}
           onChange={handleChange}
-          required
         />
       </div>
 
@@ -104,17 +107,17 @@ const LoginForm = () => {
       <p className="p line">Or With</p> 
 
       <div className="flex-row">
-        <button className="btn google">
+        <button className="btn google" onClick={handleFake}>
           <img src={googleLogo} />
           Google
         </button>
         
-        <button className="btn kakao">
+        <button className="btn kakao" onClick={handleFake}>
           <img src={kakaoLogo} />
           Kakao
         </button>
 
-        <button className="btn naver">
+        <button className="btn naver" onClick={handleFake}>
           <img src={naverLogo} />
           Naver
         </button>
