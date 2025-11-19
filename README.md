@@ -23,6 +23,7 @@ Pet Dog Disease & Growth Chatbot
 
 
 ## 폴더 구조
+'''
 LLM-PRJ
 +---BACKEND
 |   +---app
@@ -50,6 +51,7 @@ LLM-PRJ
 +---.env
 +---.pem
 +---preprocessing.py
+'''
 
 ## Git Branch 전략
 |브랜치명|설명|
