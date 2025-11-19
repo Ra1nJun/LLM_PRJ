@@ -1,7 +1,7 @@
 # LLM_PRJ
 Pet Dog Disease & Growth Chatbot
 
-## Overview
+## 개요
 해당 프로젝트는 반려 강아지의 성장, 질병 등 생애주기에 따른 필요한 정보를 답해주는 챗봇 사이트이다.
 
 ## 주요 기능
@@ -19,7 +19,7 @@ Pet Dog Disease & Growth Chatbot
 ## 기술 스택
 |Front|Back|DB|CI|
 |:---:|:---:|:---:|:---:|
-|react / JS|Python / FastAPI|ElasticSearch / Milvus / MariaDB|docker / GitHub Actions|
+|React / JS|Python / FastAPI|ElasticSearch / Milvus / MariaDB|Docker / GitHub Actions|
 
 
 ## 폴더 구조
