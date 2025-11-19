@@ -19,7 +19,7 @@ Pet Dog Disease & Growth Chatbot
 ## 기술 스택
 |Front|Back|DB|CI|
 |:---:|:---:|:---:|:---:|
-|React / JS|Python / FastAPI|ElasticSearch / Milvus / MariaDB|Docker / GitHub Actions|
+|React|Python / FastAPI|ElasticSearch / Milvus / MariaDB|Docker / GitHub Actions|
 
 
 ## 폴더 구조
