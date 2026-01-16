@@ -1,15 +1,18 @@
-from langchain_milvus import Milvus
 from typing import TypedDict, List, Optional
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
 import os
+import re
 from dotenv import load_dotenv
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseLLM
+from langchain_huggingface import HuggingFaceEmbeddings
 from elasticsearch import Elasticsearch
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
 # 상태 정의
 class Graph_State(TypedDict):
@@ -19,9 +22,9 @@ class Graph_State(TypedDict):
     answer: str
     hallucination: str
     retry_cnt: int
-    milvus: Optional[Milvus]
-    embedding_model: Optional[Embeddings]
-    llm: Optional[BaseLLM]
+    es_client: Optional[Elasticsearch]
+    embedding_model: Optional[HuggingFaceEmbeddings]
+    llm: Optional[ChatGroq]
     one_way: bool
 
 # 실행 준비
@@ -35,7 +38,7 @@ def init_node(state: Graph_State) -> dict:
         "answer": "",
         "hallucination": "",
         "retry_cnt": 0,
-        "milvus": None,
+        "es_client": None,
         "embedding_model": None,
         "llm": None,
         "one_way": False
@@ -46,13 +49,15 @@ def init_node(state: Graph_State) -> dict:
 
     # 임베딩 모델 로드
     try:
+        import torch
         load_dotenv()
         EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3")
+        device = 'mps' if torch.backends.mps.is_available() else 'cuda'
 
         embedding_model = HuggingFaceEmbeddings(
             model_name=EMBEDDING_MODEL_NAME,
             model_kwargs={
-                'device': 'cuda' 
+                'device': device
             },
             encode_kwargs={
                 'normalize_embeddings': True,    # 벡터 정규화
@@ -60,42 +65,31 @@ def init_node(state: Graph_State) -> dict:
         )
         
         merge_state["embedding_model"] = embedding_model
-        print(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 성공")
+        logger.debug(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 성공")
     except Exception as e:
-        print(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 실패: {e}")
+        logger.error(f"임베딩 모델({EMBEDDING_MODEL_NAME}) 로드 실패: {e}")
         exit(1)
 
-    # MilvusDB 연결
+    # Elasticsearch 연결
     try:
-        MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "my_collection")
-        MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
-        MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-
-        milvus = Milvus(
-            embedding_function=embedding_model,
-            collection_name=MILVUS_COLLECTION_NAME,
-            connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
-            vector_field="vector", # 벡터 필드 이름
-            index_params={"metric_type": "COSINE"}
-        )
-        merge_state["milvus"] = milvus
-        print(f"Milvus 연결 성공: {MILVUS_HOST}")
+        es_host = os.getenv("ES_HOST", "http://localhost:9200")
+        es = Elasticsearch(es_host)
+        merge_state["es_client"] = es
+        logger.debug(f"Elasticsearch 연결 성공: {es_host}")
     except Exception as e:
-        print(f"Milvus 연결 실패: {e}")
-        exit(1)
+        logger.error(f"ES 연결 실패: {e}"); exit(1)
 
     # LLM 모델 로드
     try:
-        GROQ_API_KEY=os.getenv("GROQ_API_KEY")
-        LLM_MODEL=os.getenv("GROQ_API_MODEL","openai/gpt-oss-20b")
-        TEMP=os.getenv("GROQ_API_TEMPERATURE", "0.7")
-
-        # 모델 설정
-        llm = ChatGroq(model_name=LLM_MODEL, temperature=TEMP, api_key=GROQ_API_KEY)
+        llm = ChatGroq(
+            model_name=os.getenv("GROQ_API_MODEL"),
+            temperature=float(os.getenv("GROQ_API_TEMPERATURE", "0.7")),
+            api_key=os.getenv("GROQ_API_KEY")
+        )
         merge_state["llm"] = llm
-        print(f"LLM 모델({LLM_MODEL}) 로드 성공")
+        logger.debug(f"LLM 모델 로드 성공")
     except Exception as e:
-        print(f"LLM 모델({LLM_MODEL}) 로드 실패: {e}")
+        logger.error(f"LLM 모델 로드 실패: {e}")
         exit(1)
 
     return merge_state
@@ -126,114 +120,102 @@ def input_node(state: Graph_State) -> dict:
     judgment = response.content.strip()
 
     # 출력 로그
-    print(f"[LLM 응답] {judgment}")
+    logger.debug(f"[LLM 응답] {judgment}")
 
     if judgment.lower() == "no":
-        print("질문이 반려견과 관련없다고 판단")
         return {"question": user_input, "skip_retrieve": True}
 
     return {"question": user_input, "skip_retrieve": False, "retry_cnt": 0}
 
-# 벡터DB에서 유사도 검색
-def elastic_retrieve(query, top_k=50):
-    es = Elasticsearch("http://localhost:9200")
-    elastic_query = {
+
+def retriever_node(state: Graph_State) -> dict:
+    es = state["es_client"]
+    query = state["question"]
+    model = state["embedding_model"]
+    index_name = os.getenv("ES_INDEX", "my_index")
+
+    logger.info(f"\n문서 검색 중...")
+    
+    # 1. 키워드 검색으로 상위 200개 후보군 ID 추출
+    keyword_query = {
+        "size": 200,
+        "_source": False, # ID만 필요하므로 본문은 제외하여 속도 향상
         "query": {
             "match": {
                 "text": {
-                    "query": query,
-                    "analyzer": "korean_analyzer"
+                    "query": query
                 }
             }
-        },
-        "size": top_k
+        }
     }
+    
+    try:
+        kw_response = es.search(index=index_name, body=keyword_query)
+        candidate_hits = kw_response["hits"]["hits"]
+        
+        if not candidate_hits:
+            logger.warning("키워드 검색 결과가 없습니다.")
+            return {"context": []}
 
-    results = es.search(index="my_index", body=elastic_query)
-    hits = results["hits"]["hits"]
+        # 후보 ID 리스트 생성
+        candidate_ids = [hit["_id"] for hit in candidate_hits]
+        
+        # 2. 질문 임베딩 생성
+        query_vector = model.embed_query(query)
 
-    print(f"\n[ElasticSearch 검색 결과] 총 {len(hits)}건 발견 (query='{query}')")
-    for idx, hit in enumerate(hits, start=1):
-        doc_id = hit["_id"]
-        score = hit.get("_score", 0.0)
-        text_preview = hit["_source"].get("text", "")[:100].replace("\n", " ")
-        print(f"  {idx}. ID={doc_id}, SCORE={score:.4f}, TEXT={text_preview}")
+        # 3. 추출된 ID 내에서만 벡터 검색 (Filter 사용)
+        vector_search_query = {
+            "size": 5, # 최종적으로 필요한 5개만 추출
+            "knn": {
+                "field": "vector",
+                "query_vector": query_vector,
+                "k": 15,            # 내부적으로 고려할 이웃 수
+                "num_candidates": 200, 
+                "filter": {         # 핵심: 1단계에서 찾은 ID들로만 범위를 제한
+                    "ids": {
+                        "values": candidate_ids
+                    }
+                }
+            }
+        }
 
-    docs = [
-        (
-            hit["_id"],
-            hit["_source"].get("text", ""),
-            hit.get("_score", 0.0)
-        )
-        for hit in hits
-    ]
-    return docs
+        v_response = es.search(index=index_name, body=vector_search_query)
+        final_hits = v_response["hits"]["hits"]
 
-def retriever_node(state: Graph_State) -> dict:
-    milvus_vectorstore = state["milvus"]
-    query = state["question"]
+        retrieved_docs = []
+        for hit in final_hits:
+            source = hit["_source"]
+            doc = Document(
+                page_content=source.get("text", ""),
+                metadata={
+                    "id": hit["_id"],
+                    "source": source.get("source", "N/A"),
+                    "score": hit["_score"] # Elasticsearch가 계산한 최종 유사도 점수
+                }
+            )
+            retrieved_docs.append(doc)
+            
+        logger.debug(retrieved_docs)
+        return {"context": retrieved_docs}
 
-    print(f"\n[질의] {query}")
-    print("ElasticSearch로 1차 후보군 검색 중...")
-
-    # (1) ElasticSearch에서 후보군 가져오기
-    candidate_docs = elastic_retrieve(query, top_k=100)
-
-    if not candidate_docs:
-        print("[경고] ElasticSearch에서 후보군을 찾지 못했습니다. → Milvus만으로 검색 수행")
-        results = milvus_vectorstore.similarity_search_with_score(query, k=15)
-        combined_scores = [(doc, score * 100) for doc, score in results]
-    else:
-        candidate_ids = [int(doc_id) for doc_id, _, _ in candidate_docs]
-        id_list_str = ", ".join(map(str, candidate_ids))
-
-        # (2) Milvus 내 문서 중 Elastic 후보군 id만 필터링
-        results = milvus_vectorstore.similarity_search_with_score(
-            query,
-            k=15,
-            expr=f"id in [{id_list_str}]"
-        )
-
-        # Elastic 점수 맵 생성
-        elastic_score_map = {int(doc_id): es_score for doc_id, _, es_score in candidate_docs}
-
-        # (3) Milvus 점수와 Elastic 점수 결합
-        combined_scores = []
-        for doc, milvus_score in results:
-            doc_id = int(doc.metadata.get("id", -1))
-            elastic_score = elastic_score_map.get(doc_id, 0.0)
-            final_score = milvus_score * 100 + elastic_score
-            combined_scores.append((doc, final_score))
-
-    # (4) 최종 점수 기준으로 상위 5개 문서 선택
-    combined_scores.sort(key=lambda x: x[1], reverse=True)
-    top_results = combined_scores[:5]
-
-    print(f"\n[최종 결합 점수 기준 결과] 상위 {len(top_results)}개 문서:")
-    for i, (doc, score) in enumerate(top_results, start=1):
-        preview = doc.page_content[:120].replace("\n", " ")
-        print(f"\n- 문서 {i} -")
-        print(f"내용(일부): {preview}...")
-        print(f"결합 점수 (Milvus*100 + Elastic): {score:.4f}")
-        print(f"출처: {doc.metadata.get('source', 'N/A')}")
-
-    retrieved_docs = [doc for doc, _ in top_results]
-    return {"context": retrieved_docs}
+    except Exception as e:
+        logger.error(f"검색 노드 실행 중 오류 발생: {e}")
+        return {"context": []}
 
 # context와 question을 가지고 답변 생성
 def generate_node(state: Graph_State) -> dict:
     llm = state["llm"]
     question = state["question"]
+    logger.info("\n답변 생성 중...")
 
     if state.get("skip_retrieve", False):    # 검색 건너뜀
         messages = [
             SystemMessage(content="다음 사용자의 질문에 간단히 한국어로 답변해주세요."),
             HumanMessage(content=question)
         ]
-        print("\n[직접 답변 생성 중 (검색 생략)]")
         response = llm.invoke(messages)
         answer = response.content.strip()
-        print(f"[응답] {answer}")
+        logger.debug(f"[응답] {answer}")
         return {"answer": answer}
 
     context_docs = state.get("context", [])
@@ -242,7 +224,7 @@ def generate_node(state: Graph_State) -> dict:
     base_guideline=f"""
                         1. 사용자의 질문을 읽고 이해합니다.
                         2. 제공된 문서에서 질문을 대답하는 데 도움이 되는 정보를 찾습니다.
-                        3. 사용자의 질문에 항상 한국어로 친절하게 답변합니다.
+                        3. 사용자의 질문에 맞게 정보를 한국어로 친절하게 답변합니다.
                         4. 문서에 없는 정보는 **절대** 추가하지 말고, 모른다고 솔직하게 말합니다.
                     """
     
@@ -268,7 +250,6 @@ def generate_node(state: Graph_State) -> dict:
         HumanMessage(content=f"[질문] {question}\n\n[참고 문서]\n{context_text}")
     ]
 
-    print("\n[RAG 기반 답변 생성 중...]")
     response = llm.invoke(messages)
     answer = response.content.strip()
 
@@ -276,11 +257,9 @@ def generate_node(state: Graph_State) -> dict:
 
 def check_hallucination_node(state: Graph_State) -> dict:
     if state["skip_retrieve"] == True:
-        print("검색 건너뜀으로 할루시네이션 검증 생략")
         return {"hallucination": "none"}
 
     if state["retry_cnt"] >= 1:
-        print("재시도 횟수 초과로 할루시네이션 검증 생략")
         return {"hallucination": "fail"}
 
     llm = state["llm"]
@@ -303,7 +282,7 @@ def check_hallucination_node(state: Graph_State) -> dict:
         HumanMessage(content=f"[참고 문서]\n{context_text}\n\n[생성된 답변]\n{answer}")
     ]
 
-    print("\n[LLM 기반 할루시네이션 검증 중...]")
+    logger.info("\n할루시네이션 검증 중...")
     response = llm.invoke(messages)
     hallucination = response.content.strip()
 
@@ -378,14 +357,14 @@ def workflow():
 
     def dedicate_retry(state: Graph_State) -> str:
         if state["hallucination"] == "none":
-            print("할루시네이션 없음")
+            logger.debug("할루시네이션 없음")
             return "NONE"
         else:
             if state["retry_cnt"] >= 1:
-                print("재시도 횟수 초과")
+                logger.debug("재시도 횟수 초과")
                 return "FAIL"
             state["retry_cnt"] += 1
-            print(f"할루시네이션 발견: {state['hallucination']}. 답변을 재생성합니다.")
+            logger.debug(f"할루시네이션 발견: {state['hallucination']}. 답변을 재생성합니다.")
             return "EXIST"
             
 
